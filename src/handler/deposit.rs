@@ -16,7 +16,7 @@ pub fn try_deposit(
         .find_destination_outpost(&destination)
         .ok_or(ContractError::DestinationNotFound { destination })?;
 
-    // Check if account_id exists using pattern matching
+    // Check if account_id exists
     let account_id = outpost
         .account_id
         .as_ref()

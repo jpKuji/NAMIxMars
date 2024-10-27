@@ -38,7 +38,8 @@ impl Config {
 
         // Validate each contract address in the outposts
         for outpost in &self.outposts {
-            api.addr_validate(outpost.address.as_str())?;
+            api.addr_validate(&outpost.mars_red_bank_contract)?;
+            api.addr_validate(&outpost.cw_ica_controller_contract)?;
         }
 
         Ok(())
@@ -49,7 +50,6 @@ impl Config {
             self.owner = owner;
         }
 
-        // Overwrite the complete outpost list
         if let Some(outposts) = msg.outposts {
             self.outposts = outposts;
         }
@@ -66,6 +66,42 @@ impl Config {
         self.outposts
             .iter()
             .find(|outpost| outpost.mars_red_bank_contract == destination)
+    }
+
+    pub fn find_destination_outpost_mut(&mut self, destination: &str) -> Option<&mut Outpost> {
+        self.outposts
+            .iter_mut()
+            .find(|outpost| outpost.mars_red_bank_contract == destination)
+    }
+
+    pub fn update_outpost_account_id(
+        &mut self,
+        destination: &str,
+        account_id: String,
+    ) -> Result<(), ContractError> {
+        let outpost = self.find_destination_outpost_mut(destination).ok_or(
+            ContractError::DestinationNotFound {
+                destination: destination.to_string(),
+            },
+        )?;
+
+        outpost.account_id = Some(account_id);
+        Ok(())
+    }
+
+    pub fn update_outpost_controller(
+        &mut self,
+        destination: &str,
+        controller: String,
+    ) -> Result<(), ContractError> {
+        let outpost = self.find_destination_outpost_mut(destination).ok_or(
+            ContractError::DestinationNotFound {
+                destination: destination.to_string(),
+            },
+        )?;
+
+        outpost.cw_ica_controller_contract = controller;
+        Ok(())
     }
 }
 
