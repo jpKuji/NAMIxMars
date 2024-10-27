@@ -18,10 +18,10 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub struct Outpost {
-    pub mars_address_chain: String,
-    pub cw_ica_controller_addr: String,
+    pub mars_red_bank_contract: String,
+    pub cw_ica_controller_contract: String,
     pub channel_open_init_options: ChannelOpenInitOptions,
-    pub account_id: String,
+    pub account_id: Option<String>,
 }
 
 #[cw_serde]

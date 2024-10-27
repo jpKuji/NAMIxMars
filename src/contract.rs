@@ -1,26 +1,25 @@
-use std::os::macos::raw::stat;
-
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    ensure, to_json_binary, wasm_execute, Binary, Coin, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Response, Uint128,
+    ensure, instantiate2_address, to_json_binary, wasm_execute, Binary, Coin, Decimal, Deps,
+    DepsMut, Env, MessageInfo, Response, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw_ica_controller::types::callbacks::IcaControllerCallbackMsg;
-use cw_ica_controller::types::query_msg::IcaQueryResult;
+use cw_ica_controller::types::{callbacks::IcaControllerCallbackMsg, query_msg::IcaQueryResult};
 use cw_utils::nonpayable;
 use kujira::{KujiraMsg, KujiraQuery};
 use mars_types::credit_manager::{Action, ActionCoin, ExecuteMsg as CreditManagerExecuteMsg};
 
 use crate::config::{Config, ConfigResponse};
 use crate::error::ContractError;
-use crate::handler::channels::{try_close_channel, try_create_channel};
-use crate::handler::create_vault::try_create_vault;
-use crate::handler::deposit::try_deposit;
-use crate::handler::ica::{execute_ica, extract_packet_memo};
-use crate::handler::move_funds::try_move_funds;
-use crate::handler::try_withdraw;
+use crate::handler::{
+    channels::{try_close_channel, try_create_channel},
+    create_vault::try_create_vault,
+    deposit::try_deposit,
+    ica::{execute_ica, extract_packet_memo},
+    move_funds::try_move_funds,
+    try_withdraw,
+};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{self, STATE};
 
@@ -31,51 +30,58 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut<KujiraQuery>,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response<KujiraMsg>, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    // let contract = env.contract.address;
-    // let code_id = msg.cw_ica_controller_code_id;
-    // let code_info = deps.querier.query_wasm_code_info(code_id)?;
 
-    // Initialize the contract configuration
-    let config = Config::new(msg.clone());
+    let code_id = msg.cw_ica_controller_code_id;
+    let code_info = deps.querier.query_wasm_code_info(code_id)?;
 
-    // TODO: Initialize the ICA controller for each outpost using instantiate2 and update the address in state
-    // let mut cw_ica_controller_msgs = vec![];
+    // Create mutable config to update outpost addresses
+    let mut config = Config::new(msg.clone());
+    let mut cw_ica_controller_msgs = vec![];
 
-    // for outpost in config.outposts {
-    //     // Initialize the outpost configuration
-    //     let controller_init_msg = cw_ica_controller::types::msg::InstantiateMsg {
-    //         owner: Some(msg.owner.to_string()),
-    //         channel_open_init_options: outpost.channel_open_init_options,
-    //         send_callbacks_to: Some(contract.to_string()),
-    //     };
+    // Update each outpost with its predicted address and create instantiate messages
+    for outpost in &mut config.outposts {
+        // Initialize the outpost configuration
+        let controller_init_msg = cw_ica_controller::types::msg::InstantiateMsg {
+            owner: Some(msg.owner.to_string()),
+            channel_open_init_options: outpost.channel_open_init_options.clone(),
+            send_callbacks_to: Some(env.contract.address.to_string()),
+        };
 
-    //     let label = format!("NAMI ICA Controller - Mars {}", outpost.chain);
-    //     let salt = salt.unwrap_or(env.block.time.seconds().to_string());
+        let label = format!(
+            "NAMI ICA Controller - Mars {}",
+            outpost.mars_red_bank_contract
+        );
+        let salt = format!(
+            "{}_{}",
+            outpost.mars_red_bank_contract,
+            env.block.time.seconds()
+        );
 
-    //     let creator_cannonical = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+        let creator_cannonical = deps.api.addr_canonicalize(env.contract.address.as_str())?;
 
-    //     let contract_addr = deps.api.addr_humanize(&instantiate2_address(
-    //         &code_info.checksum,
-    //         &creator_cannonical,
-    //         salt.as_bytes(),
-    //     )?)?;
+        let predicted_contract_addr =
+            instantiate2_address(&code_info.checksum, &creator_cannonical, salt.as_bytes())?;
 
-    //     let instantiate_msg = WasmMsg::Instantiate2 {
-    //         code_id,
-    //         msg: to_json_binary(&controller_init_msg)?,
-    //         funds: vec![],
-    //         label: label.into(),
-    //         admin: Some(env.contract.address.to_string()),
-    //         salt: salt.as_bytes().into(),
-    //     };
+        // Update the outpost with the predicted address
+        outpost.cw_ica_controller_contract =
+            deps.api.addr_humanize(&predicted_address)?.to_string();
 
-    //     cw_ica_controller_msgs.push(instantiate_msg);
-    // }
+        let instantiate_msg = WasmMsg::Instantiate2 {
+            code_id,
+            msg: to_json_binary(&controller_init_msg)?,
+            funds: vec![],
+            label: label.into(),
+            admin: Some(env.contract.address.to_string()),
+            salt: salt.as_bytes().into(),
+        };
+
+        cw_ica_controller_msgs.push(instantiate_msg);
+    }
 
     config.save(deps.storage, deps.api)?;
 
