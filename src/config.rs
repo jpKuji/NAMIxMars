@@ -61,6 +61,12 @@ impl Config {
         self.validate(api)?;
         Ok(())
     }
+
+    pub fn find_destination_outpost(&self, destination: &str) -> Option<&Outpost> {
+        self.outposts
+            .iter()
+            .find(|outpost| outpost.mars_red_bank_contract == destination)
+    }
 }
 
 impl From<Config> for ConfigResponse {

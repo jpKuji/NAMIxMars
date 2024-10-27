@@ -18,6 +18,12 @@ pub enum ContractError {
 
     #[error("Memo Format is unknown: {0}")]
     InvalidMemoFormat(String),
+
+    #[error("No credit account found")]
+    NoCreditAccount {},
+
+    #[error("Outpost not found for destination: {destination}")]
+    DestinationNotFound { destination: String },
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

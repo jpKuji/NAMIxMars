@@ -7,4 +7,5 @@ use kujira::KujiraMsg;
 pub fn try_create_vault() -> Result<Response<KujiraMsg>, ContractError> {
     // Prepare the red_bank message to create a credit account for the ICA
     // Prepare the SendCosmosMsgs cw_ica_controller ExecMsg to the correct cw_ica_controller
+    !todo!()
 }

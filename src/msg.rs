@@ -27,7 +27,7 @@ pub struct Outpost {
 #[cw_serde]
 pub enum ExecuteMsg {
     // Initiate a deposit from the user to a mars vault on an outpost. This msg will only dispatch an ica query.
-    Deposit {},
+    Deposit(DepositMsg),
     // Initiate a withdraw from the user to a mars vault on an outpost. This msg will only dispatch an ica query.
     Withdraw(WithdrawMsg),
     // Create a new mars vault on an outpost using the credit-vault functionality.
@@ -42,6 +42,11 @@ pub enum ExecuteMsg {
     ReceiveIcaCallback(IcaControllerCallbackMsg),
     // Update the contract configuration by the owner
     UpdateConfig(ConfigUpdate),
+}
+
+#[cw_serde]
+pub struct DepositMsg {
+    pub destination: String,
 }
 
 #[cw_serde]

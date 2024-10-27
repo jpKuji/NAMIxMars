@@ -102,10 +102,8 @@ pub fn execute(
     let mut config = Config::load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
 
-    // Create IBC queries to calculate current total fund amount. React on the callback data.
-
     let response = match msg {
-        ExecuteMsg::Deposit {} => try_deposit(&config),
+        ExecuteMsg::Deposit(msg) => try_deposit(&config, msg.destination),
         ExecuteMsg::Withdraw(msg) => {
             nonpayable(&info)?;
             try_withdraw(msg)
