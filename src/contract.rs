@@ -140,12 +140,28 @@ pub fn execute(
                     relayer: _,
                     query_result,
                 } => {
+                    // Based on the memo the packet was sent with, we can determine the action to take
+
                     let packet_memo = extract_packet_memo(&original_packet)?;
                     if let Some(memo) = packet_memo {
-                        // What instruction does the memo give?
                         match memo {
                             memo if memo.starts_with("deposit") => {
-                                let amount = memo.split("/")[1];
+                                let parts: Vec<&str> = memo.split('/').collect();
+
+                                match parts.as_slice() {
+                                    ["deposit", address, denom, amount] => {
+                                        // Now you have all variables
+                                        // address: &str - the address
+                                        // denom: &str - the denomination
+                                        // amount: &str - the amount
+                                    }
+                                    _ => {
+                                        // Handle invalid format
+                                        return Err(ContractError::InvalidMemoFormat(
+                                            memo.to_string(),
+                                        ));
+                                    }
+                                }
                                 // update the state using query result
                                 let stable_amount: Uint128 =
                                     if let Some(query_result) = query_result {
