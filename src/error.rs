@@ -24,6 +24,12 @@ pub enum ContractError {
 
     #[error("Outpost not found for destination: {destination}")]
     DestinationNotFound { destination: String },
+
+    #[error("Ica Query Error: {error}")]
+    IcaQueryError { error: String },
+
+    #[error("Failed Parsing Amount")]
+    InvalidAmount {},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

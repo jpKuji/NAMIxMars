@@ -63,13 +63,17 @@ pub fn instantiate(
         );
 
         let creator_cannonical = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+        // Convert checksum to bytes
+        let checksum_bytes = code_info.checksum.as_slice();
 
         let predicted_contract_addr =
-            instantiate2_address(&code_info.checksum, &creator_cannonical, salt.as_bytes())?;
+            instantiate2_address(checksum_bytes, &creator_cannonical, salt.as_bytes()).unwrap();
 
         // Update the outpost with the predicted address
-        outpost.cw_ica_controller_contract =
-            deps.api.addr_humanize(&predicted_address)?.to_string();
+        outpost.cw_ica_controller_contract = deps
+            .api
+            .addr_humanize(&predicted_contract_addr)?
+            .to_string();
 
         let instantiate_msg = WasmMsg::Instantiate2 {
             code_id,
@@ -153,11 +157,70 @@ pub fn execute(
                                 let parts: Vec<&str> = memo.split('/').collect();
 
                                 match parts.as_slice() {
-                                    ["deposit", address, denom, amount] => {
-                                        // Now you have all variables
-                                        // address: &str - the address
-                                        // denom: &str - the denomination
-                                        // amount: &str - the amount
+                                    ["deposit", address, denom, amount, destination] => {
+                                        let stable_amount: Uint128 = if let Some(query_result) =
+                                            query_result
+                                        {
+                                            match query_result {
+                                                IcaQueryResult::Success { responses, .. } => {
+                                                    // let response = responses.get(0).unwrap();
+                                                    // let amount = response.amount.clone();
+                                                    // amount
+                                                    Uint128::zero()
+                                                }
+                                                IcaQueryResult::Error(error) => {
+                                                    return Err(ContractError::IcaQueryError {
+                                                        error: error.to_string(),
+                                                    });
+                                                }
+                                            }
+                                        } else {
+                                            Uint128::zero()
+                                        };
+                                        state.total_stables += stable_amount;
+                                        state.deposit_redemption_rate = Decimal::from_ratio(
+                                            state.total_stables,
+                                            state.virtual_receipt,
+                                        );
+
+                                        // create new SendCosmosMsgs to call the red_bank contract
+                                        let coin = Coin {
+                                            denom: denom.to_string(),
+                                            amount: amount
+                                                .parse::<u128>()
+                                                .map(Uint128::new)
+                                                .map_err(|_| ContractError::InvalidAmount {})?,
+                                        };
+                                        let funds = vec![coin];
+
+                                        let outpost = config
+                                            .find_destination_outpost(destination)
+                                            .ok_or(ContractError::DestinationNotFound {
+                                                destination: destination.to_string(),
+                                            })?;
+
+                                        let update_credit_msg = wasm_execute(
+                                            outpost.mars_red_bank_contract.clone(),
+                                            &CreditManagerExecuteMsg::UpdateCreditAccount {
+                                                account_id: None,
+                                                account_kind: None,
+                                                actions: vec![
+                                                    Action::Deposit(coin),
+                                                    Action::Lend(ActionCoin::from(coin)),
+                                                ],
+                                            },
+                                            funds,
+                                        )?
+                                        .into();
+
+                                        let msg = execute_ica(
+                                            outpost.cw_ica_controller_contract.clone(),
+                                            None,
+                                            vec![update_credit_msg],
+                                            vec![],
+                                        )?;
+
+                                        Ok(Response::new().add_message(msg))
                                     }
                                     _ => {
                                         // Handle invalid format
@@ -166,52 +229,6 @@ pub fn execute(
                                         ));
                                     }
                                 }
-                                // update the state using query result
-                                let stable_amount: Uint128 =
-                                    if let Some(query_result) = query_result {
-                                        match query_result {
-                                            IcaQueryResult::Success { responses, .. } => {
-                                                // check for the right response
-                                            }
-                                            IcaQueryResult::Error(error) => {}
-                                        }
-                                    };
-                                state.total_stables += stable_amount;
-                                state.deposit_redemption_rate =
-                                    Decimal::from_ratio(state.total_stables, state.virtual_receipt);
-
-                                // create new SendCosmosMsgs to call the red_bank contract
-                                let cw_ica_controller =
-                                    config.outposts[0].cw_ica_controller_addr.clone();
-                                let mars_address_chain =
-                                    config.outposts[0].mars_address_chain.clone();
-                                let coin = Coin {
-                                    denom: "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4".to_string(),
-                                    amount: Uint128::from(1000000u128),
-                                };
-                                let funds = vec![coin];
-
-                                let update_credit_msg = wasm_execute(
-                                    mars_address_chain,
-                                    &CreditManagerExecuteMsg::UpdateCreditAccount {
-                                        account_id: (),
-                                        account_kind: (),
-                                        actions: vec![
-                                            Action::Deposit(coin),
-                                            Action::Lend(ActionCoin::from(coin)),
-                                        ],
-                                    },
-                                    funds,
-                                )?;
-
-                                let msg = execute_ica(
-                                    cw_ica_controller,
-                                    None,
-                                    vec![update_credit_msg],
-                                    vec![],
-                                )?;
-
-                                Ok(Response::new().add_message(msg))
                             }
                             memo if memo.starts_with("withdraw") => !unimplemented!("withdraw"),
                             memo if memo.starts_with("move_funds") => !unimplemented!("move_funds"),
